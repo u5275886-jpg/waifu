@@ -22,9 +22,9 @@ class Config:
     EXPLORE_COST: int  = 500   # coins per /explore
 
     # ── Economy ────────────────────────────────────────────────────────────────
-    STARTER_COINS: int       = 500
-    STARTER_GEMS: int        = 10
-    DAILY_COINS: int         = 2000
+    STARTER_COINS: int       = 300
+    STARTER_GEMS: int        = 1
+    DAILY_COINS: int         = 1000
     DAILY_GEMS: int          = 5
     DAILY_XP: int            = 50
     DAILY_STREAK_BONUS: int  = 100   # extra coins per streak day
