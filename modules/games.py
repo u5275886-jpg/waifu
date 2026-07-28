@@ -26,7 +26,8 @@ from config import Config
 from database.mongo import MongoDB
 from database.redis_client import RedisClient
 from utils.helpers import fmt_coins, get_or_register
-from utils.keyboards import back_to_game_menu, game_main_menu
+from utils.keyboards import back_to_game_menu, game_main_menu, start_menu
+from utils.decorators import alive_only
 
 logger = logging.getLogger("Module.Games")
 
@@ -60,6 +61,7 @@ def _scramble(word: str) -> str:
 # ══════════════════════════════════════════════════════════════════════════════
 
 @Client.on_message(filters.group & filters.command("scrabble"))
+@alive_only
 async def scrabble_cmd(client: Client, message: Message) -> None:
     chat_id = message.chat.id
     existing = await RedisClient.get_scrabble(chat_id)
@@ -118,8 +120,22 @@ async def scrabble_check(client: Client, message: Message) -> None:
         return
 
     if message.text.strip().lower() == game["word"].lower():
+        # Check if user is alive
+        user = await get_or_register(message.from_user)
+        dead_until = user.get("dead_until")
+        if dead_until:
+            from datetime import datetime, timezone
+            if isinstance(dead_until, str):
+                du = datetime.fromisoformat(dead_until)
+            else:
+                du = dead_until
+            UTC = timezone.utc
+            if du.tzinfo is None:
+                du = du.replace(tzinfo=UTC)
+            if du > datetime.now(UTC):
+                return  # Silently ignore dead users solving scrabble
+
         await RedisClient.del_scrabble(chat_id)
-        await get_or_register(message.from_user)
         await MongoDB.inc_user(message.from_user.id,
                                coins=game["reward"], xp=20)
         await message.reply(
@@ -155,6 +171,7 @@ CASHOUT_KB = lambda uid, bet: InlineKeyboardMarkup([[
 
 
 @Client.on_message(filters.command("rocket"))
+@alive_only
 async def rocket_cmd(client: Client, message: Message) -> None:
     parts = message.text.split()
 
@@ -381,9 +398,10 @@ GAME_INFO: dict[str, str] = {
         "⚔️ **RPG GUIDE**\n\n"
         "• `/rob` — Steal 10-25 % coins (reply to user)\n"
         "• `/kill` — Drain XP + 5 % coins (reply to user)\n"
-        "• `/protect` — Buy a 2-day shield\n\n"
+        "• `/protect` — Buy a 1-day shield\n"
+        "• `/heal` — Revive instantly for 1,000 coins if dead\n\n"
         f"⚠️ Rob fail chance: `{int(Config.ROB_FAIL_CHANCE*100)}%` — you pay a penalty!\n"
-        f"🛡️ Shield cost: `💰 {Config.PROTECT_COST:,}` · Duration: 2 days\n"
+        f"🛡️ Shield cost: `💰 {Config.PROTECT_COST:,}` · Duration: 1 day\n"
         f"⏰ Rob CD: `1h` · Kill CD: `2h`"
     ),
     "gacha": (
@@ -408,9 +426,11 @@ GAME_INFO: dict[str, str] = {
         "`/bal` · `/daily` · `/pay <amt>` · `/gift`\n"
         "`/top` · `/leaderboard`\n\n"
         "**⚔️ RPG**\n"
-        "`/rob` · `/kill` · `/protect`\n\n"
+        "`/rob` · `/kill` · `/protect` · `/heal`\n\n"
         "**🎮 Games**\n"
         "`/rocket <bet> [mult]` · `/scrabble` · `/game`\n\n"
+        "**🤖 AI & Features**\n"
+        "`/askwaifu <question>` · `/fortune`\n\n"
         "**⚙️ Admin**\n"
         "`/setgroup <key> <value>`\n"
         "`/start` · `/help`"
@@ -434,6 +454,20 @@ async def ginfo_cb(client: Client, cb: CallbackQuery) -> None:
         await cb.message.edit_text(
             "🎮 **ZEXIS GAME CENTER**\n\nSelect a topic below:",
             reply_markup=game_main_menu()
+        )
+    elif key == "start":
+        user = await get_or_register(cb.from_user)
+        await cb.message.edit_text(
+            f"💫 **Hey {cb.from_user.first_name}! Welcome to Zexis!**\n\n"
+            f"I'm a feature-packed Telegram bot:\n\n"
+            f"🎴 **Anime Waifu Gacha** — Collect rarities up to 🌈 Velora!\n"
+            f"💰 **Dual Economy** — Coins & Gems\n"
+            f"⚔️ **RPG Combat** — Rob, Kill & Protect\n"
+            f"🎮 **Mini-Games** — Rocket & Scrabble\n"
+            f"📊 **Stats Card** — Live PIL-rendered balance card\n\n"
+            f"Your current balance: `💰 {user['coins']:,}` · `💎 {user.get('gems', 0)}`\n\n"
+            f"Add me to a group to start spawning characters!",
+            reply_markup=start_menu(),
         )
     elif key in GAME_INFO:
         await cb.message.edit_text(

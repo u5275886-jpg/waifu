@@ -33,7 +33,7 @@ class Config:
 
     # ── RPG ────────────────────────────────────────────────────────────────────
     ROB_COOLDOWN: int      = 3600    # 1 h
-    ROB_FAIL_CHANCE: float = 0.40    # 40 % fail
+    ROB_FAIL_CHANCE: float = 0.20    # 20 % fail (much easier to rob)
     ROB_STEAL_MIN: float   = 0.10    # steal ≥ 10 %
     ROB_STEAL_MAX: float   = 0.25    # steal ≤ 25 %
     ROB_PENALTY: float     = 0.10    # lose 10 % on fail
@@ -44,7 +44,8 @@ class Config:
     KILL_COIN_STEAL: float = 0.05  # drain 5 % coins
 
     PROTECT_COST: int     = 500
-    PROTECT_DURATION: int = 172800  # 2 days
+    PROTECT_DURATION: int = 86400  # 1 day
+    DEATH_DURATION: int   = 86400  # 24 hours / 1 day
 
     # ── Rocket Game ────────────────────────────────────────────────────────────
     ROCKET_MIN_BET: int = 100

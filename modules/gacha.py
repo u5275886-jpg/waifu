@@ -36,6 +36,7 @@ from utils.helpers import (
 )
 from utils.image_gen import generate_char_card
 from utils.keyboards import harem_nav, propose_buttons
+from utils.decorators import alive_only
 
 logger = logging.getLogger("Module.Gacha")
 
@@ -142,6 +143,7 @@ async def _expire_spawn(client: Client, chat_id: int, msg_id: int) -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 
 @Client.on_message(filters.group & filters.command(["grasp", "claim"]))
+@alive_only
 async def grasp_cmd(client: Client, message: Message) -> None:
     chat_id = message.chat.id
     state = await RedisClient.get_spawn(chat_id)
@@ -191,9 +193,29 @@ async def qclaim_cb(client: Client, cb: CallbackQuery) -> None:
         await cb.answer("💨 Someone already grabbed her!", show_alert=True)
         return
 
+    # Check if user is alive
+    user = await get_or_register(cb.from_user)
+    dead_until = user.get("dead_until")
+    if dead_until:
+        from datetime import datetime, timezone
+        from utils.helpers import fmt_time
+        if isinstance(dead_until, str):
+            du = datetime.fromisoformat(dead_until)
+        else:
+            du = dead_until
+        UTC = timezone.utc
+        if du.tzinfo is None:
+            du = du.replace(tzinfo=UTC)
+        if du > datetime.now(UTC):
+            rem = du - datetime.now(UTC)
+            await cb.answer(
+                f"💀 You are DEAD and cannot claim!\nRevive in {fmt_time(int(rem.total_seconds()))} or use /heal 💖",
+                show_alert=True
+            )
+            return
+
     char = state["character"]
     await RedisClient.del_spawn(chat_id)
-    await get_or_register(cb.from_user)
     await _award_character(cb.from_user.id, char, chat_id)
 
     coin_bonus = char["price"] // 10
@@ -312,6 +334,7 @@ def _build_harem_page(chars: list, page: int, sort_key: str, owner) -> tuple[str
 # ══════════════════════════════════════════════════════════════════════════════
 
 @Client.on_message(filters.command("explore"))
+@alive_only
 async def explore_cmd(client: Client, message: Message) -> None:
     user = await get_or_register(message.from_user)
     cost = Config.EXPLORE_COST

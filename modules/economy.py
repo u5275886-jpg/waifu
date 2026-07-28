@@ -321,18 +321,44 @@ async def _send_leaderboard(msg_or_obj, key: str, edit: bool = False) -> None:
     title, field, icon = SORT_FIELDS[key]
     if key == "coins":
         rows = await MongoDB.top_by_coins(10)
+    elif key == "xp":
+        rows = await MongoDB.top_by_xp(10)
     else:
-        rows = await MongoDB.top_by_xp(10) if key == "xp" else (
-            await MongoDB.top_by_coins(10)  # placeholder — add top_by_kills index
-        )
+        rows = await MongoDB.top_by_kills(10)
 
-    medals = ["🥇","🥈","🥉"] + ["🏅"] * 7
-    lines  = [f"🏆 **{title}**\n"]
+    medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
+
+    lines = [
+        f"🏆 **{title.upper()}**",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ]
+
     for i, u in enumerate(rows):
         val = u.get(field, 0)
-        lines.append(
-            f"{medals[i]} `#{i+1:02d}` **{u.get('first_name','?')[:18]}** — `{icon} {fmt_coins(val)}`"
-        )
+        name = u.get('first_name', '?')[:15]
+        # Format the value nicely
+        if field == "coins":
+            formatted_val = fmt_coins(val)
+        elif field == "xp":
+            formatted_val = f"{val:,} XP"
+        else:
+            formatted_val = f"{val:,} kills"
+
+        medal_prefix = medals[i]
+        rank_str = f"`#{i+1:02d}`"
+
+        if i < 3:
+            # Highlight top 3 players
+            lines.append(
+                f"{medal_prefix} {rank_str} **{name}** — `{icon} {formatted_val}` 🔥"
+            )
+        else:
+            lines.append(
+                f"{medal_prefix} {rank_str} **{name}** — `{icon} {formatted_val}`"
+            )
+
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("✨ *Keep training and playing to climb the ranks!*")
 
     text = "\n".join(lines)
     kb   = leaderboard_tabs(key)

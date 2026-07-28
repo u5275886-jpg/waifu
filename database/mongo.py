@@ -57,6 +57,7 @@ class MongoDB:
         await cls.users.create_index("user_id",  unique=True)
         await cls.users.create_index([("coins", -1)])
         await cls.users.create_index([("xp",    -1)])
+        await cls.users.create_index([("kills", -1)])
         await cls.groups.create_index("chat_id", unique=True)
         await cls.characters.create_index("char_id", unique=True)
         await cls.characters.create_index("rarity")
@@ -126,6 +127,11 @@ class MongoDB:
     @classmethod
     async def top_by_xp(cls, limit: int = 10) -> list[dict]:
         cursor = cls.users.find({}).sort("xp", -1).limit(limit)
+        return await cursor.to_list(length=limit)
+
+    @classmethod
+    async def top_by_kills(cls, limit: int = 10) -> list[dict]:
+        cursor = cls.users.find({}).sort("kills", -1).limit(limit)
         return await cursor.to_list(length=limit)
 
     @classmethod
