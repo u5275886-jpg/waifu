@@ -47,12 +47,18 @@ def game_main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🌸 Gacha",    callback_data="ginfo:gacha"),
             InlineKeyboardButton("📖 Commands", callback_data="ginfo:commands"),
         ],
+        [
+            InlineKeyboardButton("🔙 Back to Start", callback_data="ginfo:start")
+        ]
     ])
 
 
 def back_to_game_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 Back to Menu", callback_data="ginfo:main")]
+        [
+            InlineKeyboardButton("🔙 Back to Menu", callback_data="ginfo:main"),
+            InlineKeyboardButton("🏠 Main Start",   callback_data="ginfo:start")
+        ]
     ])
 
 
