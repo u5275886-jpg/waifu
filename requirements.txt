@@ -1,0 +1,17 @@
+# ── Core Telegram framework ────────────────────────────────────────────────────
+pyrogram==2.0.106
+TgCrypto              # C-extension — 5-10x faster encryption for Pyrogram
+
+# ── Database drivers ───────────────────────────────────────────────────────────
+motor==3.4.0          # async MongoDB driver (wraps pymongo)
+pymongo==4.7.2        # motor dependency
+redis[hiredis]==5.0.3 # async Redis client; hiredis = faster parser
+
+# ── HTTP (avatar downloads, character images) ──────────────────────────────────
+aiohttp==3.9.5
+
+# ── Image generation ───────────────────────────────────────────────────────────
+Pillow==10.3.0
+
+# ── Environment / config ───────────────────────────────────────────────────────
+python-dotenv==1.0.1
